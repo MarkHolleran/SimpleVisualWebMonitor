@@ -6,19 +6,30 @@ from selenium import webdriver
 from pathlib import Path
 from PIL import Image
 
+from notification import send_email
+
+
 # Returns percent difference between reference and current images
 
 class Monitor:
 
-    def __init__(self,threshold,path,url):
-        self.deltaThreshold = threshold
-        self.path = Path(path)
-        self.url = url
+    def __init__(self, thresholds, links):
 
-    def similarity(self):
+        self.links = links
+        self.paths = []
+        self.thresholds = thresholds
+        self.chromeOptions = webdriver.ChromeOptions()
+        self.chromeOptions.add_argument('--headless')
+        self.chromeOptions.add_argument('window-size=1920,1440')
+        self.chromeOptions.add_argument('--hide-scrollbars')
+
+        for x in links:
+            self.paths.append(Path(x))
+
+    def similarity(self, current, reference):
         # reading images
-        refImage = cv2.imread('reference.png', 0)
-        currImage = cv2.imread('current.png', 0)
+        refImage = cv2.imread(reference)
+        currImage = cv2.imread(current)
 
         # takes the absolute difference between the two images
         res = cv2.absdiff(refImage, currImage)
@@ -28,58 +39,77 @@ class Monitor:
 
         # percentage difference number of pixels that are not 0
         percentage = (np.count_nonzero(res) * 100) / res.size
-
+        print(percentage)
         return math.floor(percentage)
 
     def run(self):
 
-        if not self.path.is_file():
-            print('reference DNE, creating...')
+        for link in self.paths:
 
-            # Here Chrome  will be used
-            driver = webdriver.Chrome()
+            reference = ((str(link) + "reference.png").replace('\\', "").replace(':', ''))
 
-            # Opening the website
-            driver.get(self.url)
-            # saves reference image
-            driver.save_screenshot("reference.png")
+            if not Path(reference).is_file():
+                print('reference DNE, creating...')
+
+                # Here Chrome  will be used
+                driver = webdriver.Chrome(options=self.chromeOptions)
+
+                # Opening the website
+                driver.get(str(link))
+                time.sleep(4)
+
+                # saves reference image
+                driver.save_screenshot(reference)
 
         while True:
+
             try:
-                # opens website
-                driver = webdriver.Chrome()
-                driver.get(self.url)
-                # saves screenshot of current state of website
-                driver.save_screenshot("current.png")
 
-                # compares changes between reference and current images
-                if self.similarity() < self.deltaThreshold:
+                for threshold, link in enumerate(self.paths):
 
-                    print('no real changes')
-                    time.sleep(30)
-                    continue
+                    reference = (str(link) + "reference.png").replace("\\", "").replace(':', '')
+                    current = (str(link) + "current.png").replace("\\", "").replace(':', '')
 
-                # if the difference is larger than 18%...
-                else:
+                    # opens website
+                    driver = webdriver.Chrome(options=self.chromeOptions)
+                    driver.get(str(link))
+                    # saves screenshot of current state of website
+                    time.sleep(4)
+                    driver.save_screenshot(current)
 
-                    print("something changed")
+                    # compares changes between reference and current images
 
-                    refImage = Image.open("reference.png")
-                    image = Image.open("current.png")
+                    comparison_result = self.similarity(current, reference)
 
-                    image.show()
-                    refImage.show()
+                    if comparison_result < self.thresholds[threshold]:
 
-                    time.sleep(30)
+                        print('no real changes', comparison_result)
 
-                    break
+                        continue
+
+                    # if the difference is larger than 18%...
+                    else:
+
+                        print("something changed", comparison_result)
+
+                        # send email here
+                        send_email(self.links)
+
+                        refImage = Image.open(reference)
+                        image = Image.open(current)
+
+                        image.show()
+                        refImage.show()
+
+                time.sleep(600)
 
             # To handle exceptions
             except Exception as e:
                 print(e)
 
 
-newMonitor = Monitor(18,'reference.png', "https://google.com")
+links = ["https://aphextwin.warp.net/retail-opportunity", "https://aphextwin.warp.net/vinyl-cd-merch"]
+thresholds = [2, 2]
 
-
+newMonitor = Monitor(thresholds, links)
 newMonitor.run()
