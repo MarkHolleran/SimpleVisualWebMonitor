@@ -108,7 +108,7 @@ class Monitor:
                 print(e)
 
 
-links = ["https://aphextwin.warp.net/retail-opportunity", "https://aphextwin.warp.net/vinyl-cd-merch"]
+links = ["", ""]
 thresholds = [2, 2]
 
 newMonitor = Monitor(thresholds, links)
